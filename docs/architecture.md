@@ -15,7 +15,7 @@ Supabase (members, photos)
    ▼
 API Gateway ──▶ API Lambda (FastAPI) ──▶ SQS queue ──▶ Worker Lambda ──▶ Rekognition
    ▲                  │                    └─▶ DLQ          │
-   │ Supabase JWT     └──▶ Rekognition (search)              └──▶ Supabase (photo, status)
+   │ Supabase token   └──▶ Rekognition (search)              └──▶ Supabase (photo, status)
 Staff app
 
 CloudWatch collects logs and metrics from both functions.
@@ -75,10 +75,14 @@ Code is organised so each layer depends only on the one beneath it.
 
 | Caller              | Mechanism                                                       |
 | ------------------- | --------------------------------------------------------------- |
-| Staff app (search)  | Supabase access token verified by API Gateway; staff role checked in the function. |
+| Staff app (search)  | Supabase access token, verified by the API Lambda against the project's JWT secret. Any signed-in user is accepted; no role check. |
 | Supabase (webhook)  | Shared secret sent in a request header.                         |
 | Service to AWS      | IAM execution roles with least privilege.                       |
 | Service to Supabase | Service key held in SSM Parameter Store.                        |
+
+Token verification lives in one function in `app/core/auth.py`, so moving from
+the legacy shared secret to Supabase's asymmetric signing keys later is a local
+change (see ADR 0007).
 
 ## Cross-cutting concerns
 
@@ -92,7 +96,6 @@ Code is organised so each layer depends only on the one beneath it.
 
 ## Open questions
 
-- Name of the claim that marks a Supabase user as staff.
-- Whether the Supabase project uses asymmetric signing keys (affects the
-  authorizer choice; see ADR 0007).
+- Whether members also sign in through the same Supabase project. If they do,
+  any signed-in member could call search (see ADR 0007).
 - Contracts for capabilities beyond face recognition.

@@ -48,11 +48,12 @@ Supabase member row changes
 ## Search flow
 
 ```
-Staff app → API Gateway (JWT checked) → API Lambda → Rekognition → matches
+Staff app → API Gateway → API Lambda (token verified) → Rekognition → matches
 ```
 
 1. The staff app sends a photo with the member's Supabase access token.
-2. API Gateway verifies the token; the function confirms the staff role.
+2. The function verifies the token's signature, expiry, and audience. Any signed-in
+   user is accepted; there is no role check.
 3. The photo is checked for exactly one face, then searched against the
    collection.
 4. The function returns up to three candidates above the similarity threshold.
@@ -84,6 +85,15 @@ Request: multipart form with `photo` (JPEG or PNG).
 ```
 An empty `matches` array means no member met the threshold.
 
+## Initial backfill
+
+Existing members are enrolled by `scripts/backfill.py`. It selects members that
+have a photo and no `ready` status, sets them to `pending`, and queues one job
+each, the same job shape the webhook produces. Worker concurrency is capped so
+Rekognition limits are respected. The script is safe to re-run. It should run
+after the webhook is live so that photo changes made during the backfill are
+not lost.
+
 ## Data
 
 | Store       | Content                                                             |
@@ -108,12 +118,12 @@ Face data is biometric and is treated as sensitive personal data.
 - Collect explicit consent before enrolment and record it on the member.
 - Deletion of a member or photo removes the face from the collection.
 - Keep photos and embeddings out of logs; log identifiers only.
-- Restrict search to authenticated staff and record who searched.
+- Restrict search to signed-in users and record who searched.
 - Confirm the legal requirements of the operating jurisdiction before launch.
 
 ## Open questions
 
-- Staff claim name in the Supabase token.
+- Whether members share the Supabase project's sign-in (see ADR 0007).
 - Retention and consent-record design in Supabase.
 - Expected member count, to confirm cost estimates.
-- Whether an initial bulk enrolment of existing members is needed.
+- Number of existing members to backfill, for time and cost estimates.
