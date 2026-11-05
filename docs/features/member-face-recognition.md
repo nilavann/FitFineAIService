@@ -54,7 +54,7 @@ Staff app → API Gateway → API Lambda (token verified) → Rekognition → ma
 ```
 
 1. The staff app sends a photo with the member's Supabase access token.
-2. The function verifies the token's signature, expiry, and audience. Only staff have
+2. The function verifies the token's signature (against Supabase's public keys), issuer, audience, and expiry. Only staff have
    accounts in the project, so any valid token is accepted; there is no role check.
 3. The photo is checked for exactly one face, then searched against the
    collection.
@@ -110,6 +110,11 @@ An empty `matches` array means no member met the threshold.
 | Supabase    | Member details, photo, `face_status`, `face_id`                     |
 | Rekognition | Face embeddings, with `member_id` as the external image identifier  |
 
+## Scale
+
+About 44 members. Rekognition storage and request volume at this size are
+negligible, so cost is not a design constraint for this feature.
+
 ## Behaviour and limits
 
 - Results are suggestions for staff to confirm, not automated decisions.
@@ -132,5 +137,9 @@ Face data is biometric and is treated as sensitive personal data.
 
 ## Open questions
 
-- Retention and consent-record design in Supabase.
-- Expected member count, to confirm cost estimates.
+- Consent: should enrolment be blocked until a consent record exists on the member
+  in Supabase (for example a consent timestamp column), or is consent handled
+  outside the system?
+- Retention: when a member leaves, should their face be removed from Rekognition
+  immediately, after a set number of days, or only on request?
+

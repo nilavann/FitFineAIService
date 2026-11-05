@@ -75,14 +75,12 @@ Code is organised so each layer depends only on the one beneath it.
 
 | Caller              | Mechanism                                                       |
 | ------------------- | --------------------------------------------------------------- |
-| Staff app (search, enrol) | Supabase access token, verified by the API Lambda against the project's JWT secret. Only staff hold accounts in the project, so any valid token is accepted; no role check. |
+| Staff app (search, enrol) | Supabase access token, verified by the API Lambda against the project's published public keys (JWKS). Only staff hold accounts in the project, so any valid token is accepted; no role check. |
 | Supabase (webhook)  | Shared secret sent in a request header.                         |
 | Service to AWS      | IAM execution roles with least privilege.                       |
 | Service to Supabase | Service key held in SSM Parameter Store.                        |
 
-Token verification lives in one function in `app/core/auth.py`, so moving from
-the legacy shared secret to Supabase's asymmetric signing keys later is a local
-change (see ADR 0007).
+Token verification lives in one function in `app/core/auth.py`. It fetches the project's public keys, caches them, accepts only the asymmetric algorithm the project uses, and checks issuer, audience, and expiry (see ADR 0007).
 
 ## Cross-cutting concerns
 

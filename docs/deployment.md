@@ -16,8 +16,7 @@ VPC, subnets, NAT gateways, or databases are used on the AWS side.
   the worker timeout; jobs move to the dead-letter queue after a few failed
   receives.
 - **Amazon Rekognition:** one face collection per environment.
-- **SSM Parameter Store (SecureString):** Supabase URL and service key, the
-  Supabase JWT secret, webhook secret, and tunable settings such as the similarity threshold.
+- **SSM Parameter Store (SecureString):** Supabase URL and service key, the JWKS URL and expected issuer, the webhook secret, and tunable settings such as the similarity threshold.
 - **CloudWatch:** logs, metrics, and alarms.
 
 ## IAM
