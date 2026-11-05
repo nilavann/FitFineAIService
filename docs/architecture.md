@@ -75,7 +75,7 @@ Code is organised so each layer depends only on the one beneath it.
 
 | Caller              | Mechanism                                                       |
 | ------------------- | --------------------------------------------------------------- |
-| Staff app (search)  | Supabase access token, verified by the API Lambda against the project's JWT secret. Any signed-in user is accepted; no role check. |
+| Staff app (search)  | Supabase access token, verified by the API Lambda against the project's JWT secret. Only staff hold accounts in the project, so any valid token is accepted; no role check. |
 | Supabase (webhook)  | Shared secret sent in a request header.                         |
 | Service to AWS      | IAM execution roles with least privilege.                       |
 | Service to Supabase | Service key held in SSM Parameter Store.                        |
@@ -96,6 +96,4 @@ change (see ADR 0007).
 
 ## Open questions
 
-- Whether members also sign in through the same Supabase project. If they do,
-  any signed-in member could call search (see ADR 0007).
 - Contracts for capabilities beyond face recognition.
