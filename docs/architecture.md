@@ -28,7 +28,7 @@ over TLS, authenticated by IAM roles and stored credentials respectively.
 
 | Component     | Responsibility                                                          |
 | ------------- | ----------------------------------------------------------------------- |
-| API Lambda    | FastAPI app (via Mangum): webhook intake and photo search.              |
+| API Lambda    | FastAPI app (via Mangum): webhook intake, enrol requests, and photo search. |
 | Worker Lambda | Consumes queue jobs; keeps Rekognition in step with member photos.      |
 | SQS + DLQ     | Decouples intake from processing; provides retries and failure parking. |
 | Rekognition   | Face collection holding embeddings, keyed by member identifier.         |
@@ -75,7 +75,7 @@ Code is organised so each layer depends only on the one beneath it.
 
 | Caller              | Mechanism                                                       |
 | ------------------- | --------------------------------------------------------------- |
-| Staff app (search)  | Supabase access token, verified by the API Lambda against the project's JWT secret. Only staff hold accounts in the project, so any valid token is accepted; no role check. |
+| Staff app (search, enrol) | Supabase access token, verified by the API Lambda against the project's JWT secret. Only staff hold accounts in the project, so any valid token is accepted; no role check. |
 | Supabase (webhook)  | Shared secret sent in a request header.                         |
 | Service to AWS      | IAM execution roles with least privilege.                       |
 | Service to Supabase | Service key held in SSM Parameter Store.                        |

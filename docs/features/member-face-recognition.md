@@ -28,7 +28,9 @@ Supabase member row changes
 - **Write-back must not loop.** The status update changes the member row and
   would fire the webhook again. The webhook route enqueues a job only when the
   photo path differs between the old and new record (or on insert or delete).
-- **Stale events are skipped.** The worker acts on the row's current state.
+- **Stale events are skipped.** The worker acts on the row's current state. Jobs
+  from the enrol route carry no photo path, so the worker uses whatever photo the
+  row holds at that moment.
 - **Removal:** when the photo is cleared or the member is deleted, the worker
   deletes the stored face from Rekognition.
 - **Replacement:** the previous face is deleted using the stored `face_id`
@@ -66,6 +68,7 @@ from Supabase under its own row-level security.
 | Method and path                      | Caller   | Purpose                                      |
 | ------------------------------------ | -------- | -------------------------------------------- |
 | `POST /v1/webhooks/member-photo`     | Supabase | Receive member change events                 |
+| `POST /v1/members/{id}/enrol`        | Staff app| Queue enrolment for one existing member      |
 | `POST /v1/members/search`            | Staff    | Find members matching a submitted photo      |
 | `GET /health`                        | Monitor  | Liveness check                               |
 
@@ -77,6 +80,21 @@ from Supabase under its own row-level security.
   "old_record": { "id": "m_1042", "photo_path": "members/m_1042/old.jpg" }
 }
 ```
+
+### Enrol request and response
+`POST /v1/members/{id}/enrol` takes a Supabase access token and no body. It
+queues a job containing only the `member_id` and replies `202`:
+```json
+{ "member_id": "m_1042", "status": "queued" }
+```
+The worker then reads the member's current photo from Supabase and enrols it
+through the same steps as any other job. The route does not check the photo
+itself; problems appear later as the member's `face_status`. Calling it again
+is safe, because enrolment replaces any previous face.
+
+Intended use: enrolling members who already exist, or re-running enrolment for
+a member whose status is `failed`, `no_face`, or `multiple_faces`. The app calls
+it once per member; throttling on API Gateway and the queue absorb a large run.
 
 ### Search request and response
 Request: multipart form with `photo` (JPEG or PNG).
@@ -116,4 +134,3 @@ Face data is biometric and is treated as sensitive personal data.
 
 - Retention and consent-record design in Supabase.
 - Expected member count, to confirm cost estimates.
-- How the app will submit existing members for enrolment: the webhook route only accepts Supabase events with a changed photo path, so the app needs an entry point of its own.
