@@ -116,4 +116,4 @@ Face data is biometric and is treated as sensitive personal data.
 
 - Retention and consent-record design in Supabase.
 - Expected member count, to confirm cost estimates.
-- How the app will submit existing members for enrolment (see the note under Enrolment flow).
+- How the app will submit existing members for enrolment: the webhook route only accepts Supabase events with a changed photo path, so the app needs an entry point of its own.
