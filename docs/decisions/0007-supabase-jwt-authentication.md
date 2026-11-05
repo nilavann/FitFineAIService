@@ -3,7 +3,7 @@
 **Status:** Accepted
 
 ## Context
-Staff already sign in through Supabase. The search endpoint must require a
+Staff already sign in through Supabase, and only staff hold accounts in the project. The search endpoint must require a
 signed-in user and be attributable to a person, because it handles biometric
 lookups. The Supabase project currently signs tokens with the legacy shared
 secret (HS256) rather than asymmetric keys.
@@ -11,7 +11,8 @@ secret (HS256) rather than asymmetric keys.
 ## Decision
 Callers send their Supabase access token. The API Lambda verifies the signature
 with the project's JWT secret (kept in SSM), and checks expiry and audience.
-Any authenticated user is accepted; no role is checked. The user's identifier is
+Any valid token is accepted; no role is checked, because every account in the
+project belongs to staff. The user's identifier is
 written to the request log. The webhook route is separate and uses a shared
 secret header.
 
@@ -28,6 +29,7 @@ secret header.
   the API Lambda's role. Rotating it signs out all users.
 - Verification sits in one function, so adopting Supabase's asymmetric signing
   keys later only changes that function.
-- **Risk:** if members sign in to the same Supabase project, any member can call
-  search. A staff role check, or a separate staff table lookup, closes this and
-  can be added without changing the API.
+- **Assumption:** every account in the project is a staff account. If member or
+  other non-staff sign-ins are ever added, a staff check (a role claim or a staff
+  table lookup) must be added first, since search is a biometric lookup. This can
+  be done without changing the API.

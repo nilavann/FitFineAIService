@@ -52,8 +52,8 @@ Staff app → API Gateway → API Lambda (token verified) → Rekognition → ma
 ```
 
 1. The staff app sends a photo with the member's Supabase access token.
-2. The function verifies the token's signature, expiry, and audience. Any signed-in
-   user is accepted; there is no role check.
+2. The function verifies the token's signature, expiry, and audience. Only staff have
+   accounts in the project, so any valid token is accepted; there is no role check.
 3. The photo is checked for exactly one face, then searched against the
    collection.
 4. The function returns up to three candidates above the similarity threshold.
@@ -123,7 +123,6 @@ Face data is biometric and is treated as sensitive personal data.
 
 ## Open questions
 
-- Whether members share the Supabase project's sign-in (see ADR 0007).
 - Retention and consent-record design in Supabase.
 - Expected member count, to confirm cost estimates.
 - Number of existing members to backfill, for time and cost estimates.
