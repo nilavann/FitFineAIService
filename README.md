@@ -11,9 +11,9 @@ other FitFine applications.
 | Language          | Python 3.12                                     |
 | API framework     | FastAPI                                         |
 | Model access      | Amazon Bedrock                                  |
-| Compute           | AWS ECS on Fargate behind an Application Load Balancer |
+| Compute           | AWS Lambda behind Amazon API Gateway (HTTP API) |
 | Infrastructure    | AWS CDK (Python)                                |
-| Packaging         | Docker container                                |
+| Packaging         | Lambda deployment package (zip) via CDK         |
 
 ## Documentation
 

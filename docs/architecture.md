@@ -11,11 +11,15 @@ each request.
 ## System context
 
 ```
- FitFine clients ──HTTPS──▶ ALB ──▶ ECS Fargate (FastAPI) ──▶ Amazon Bedrock
-                                          │
-                                          └──▶ CloudWatch (logs, metrics)
-                                          └──▶ Secrets Manager / SSM (config)
+ FitFine clients ──HTTPS──▶ API Gateway ──▶ Lambda (FastAPI) ──▶ Amazon Bedrock
+                                                 │
+                                                 └──▶ CloudWatch (logs, metrics)
 ```
+
+The function is not attached to a VPC. It reaches Bedrock and CloudWatch
+through their public AWS service endpoints, authenticated by its IAM
+execution role and encrypted with TLS. The FastAPI application is adapted to
+the Lambda event model with Mangum.
 
 ## Layering
 
@@ -40,7 +44,7 @@ Code is organised so that each layer depends only on the one beneath it.
 - Model output is parsed and validated against a schema before it is returned.
   Output that fails validation is retried or reported as an error, never passed
   through.
-- Configuration is read from environment variables; no secrets are committed.
+- Configuration is read from Lambda environment variables; no secrets are committed.
 
 ## API conventions
 
@@ -60,7 +64,10 @@ Code is organised so that each layer depends only on the one beneath it.
 - **Safety:** responses that involve health, exercise, or nutrition guidance
   pass through output checks and include appropriate disclaimers. Limits on
   recommended values are enforced in code rather than relying on the model.
-- **Cost control:** per-request token ceilings and rate limiting.
+- **Cost control:** per-request token ceilings and API Gateway throttling.
+- **Latency:** the HTTP API integration timeout is 30 seconds, so model calls
+  must complete within that bound. Output length limits and model choice are
+  set with this in mind; longer-running work would need an asynchronous design.
 
 ## Open questions
 

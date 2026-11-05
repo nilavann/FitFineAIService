@@ -8,7 +8,7 @@ and validating structured output. Strong typing at the HTTP boundary and mature
 AWS SDK support are the main requirements.
 
 ## Decision
-Use Python 3.12 with FastAPI and Pydantic. Use `boto3` for AWS access.
+Use Python 3.12 with FastAPI and Pydantic, adapted to Lambda with Mangum. Use `boto3` for AWS access.
 
 ## Consequences
 - Request and response contracts are enforced by typed models, and OpenAPI is
