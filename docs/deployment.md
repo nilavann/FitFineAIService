@@ -54,6 +54,32 @@ Supabase project or schema. Code is identical; only configuration differs.
 All infrastructure is defined in `infra/` using AWS CDK in Python and deployed
 through the pipeline. Manual console changes are not part of the process.
 
+## Resource tagging
+
+Every AWS resource created for this service carries two tags, so resources can
+be found, grouped, and costed by project and environment.
+
+| Tag key       | Value                                 |
+| ------------- | ------------------------------------- |
+| `Project`     | `fitfine-ai-service`                  |
+| `Environment` | `dev`, `staging`, or `prod`           |
+
+- Tags are applied once at the CDK app level, so every taggable resource in
+  every stack inherits them. Individual stacks do not set them.
+- Resource names also carry the project and environment, for example
+  `fitfine-ai-prod-enrol-queue`, so they are recognisable where tags are not shown.
+- Anything created outside CDK, such as secret values entered by hand, is tagged
+  with the same two keys at creation time.
+- A test synthesises each stack and fails if a taggable resource lacks either tag.
+- The tags are activated as cost allocation tags in AWS Billing so spend can be
+  filtered by project and environment. Activation is a one-time account step, and
+  tags only appear in cost reports after it.
+- Filtering: the Resource Groups tag editor, or `aws resourcegroupstaggingapi
+  get-resources` with `Project` and `Environment`, lists everything for one
+  environment.
+
+See [ADR 0008](decisions/0008-resource-tagging.md).
+
 ## Delivery pipeline
 
 1. Pull request: lint, type check, unit tests.
