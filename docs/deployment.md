@@ -2,37 +2,54 @@
 
 ## Target platform
 
-The service runs on AWS as a single Lambda function exposed through an Amazon
-API Gateway HTTP API. Face matching is provided by Amazon Rekognition and
-member records are held in DynamoDB; no model hosting is managed by this project. No VPC, subnets, or NAT gateways are used.
+The service runs on AWS using Lambda, SQS, and API Gateway. Face matching is
+provided by Amazon Rekognition. Member data and photos remain in Supabase. No
+VPC, subnets, NAT gateways, or databases are used on the AWS side.
 
 ## Components
 
-- **API Gateway (HTTP API):** public HTTPS entry point; routes all requests to
-  the function and applies throttling.
-- **Lambda function (Python 3.12):** runs the FastAPI application via Mangum.
+- **API Gateway (HTTP API):** public HTTPS entry point with throttling and a JWT
+  authorizer on the search route.
+- **API Lambda (Python 3.12):** FastAPI application via Mangum.
+- **Worker Lambda (Python 3.12):** SQS-triggered enrolment worker.
+- **SQS standard queue and dead-letter queue:** the visibility timeout exceeds
+  the worker timeout; jobs move to the dead-letter queue after a few failed
+  receives.
 - **Amazon Rekognition:** one face collection per environment.
-- **DynamoDB:** member table with on-demand capacity.
-- **IAM execution role:** least privilege: the Rekognition collection actions
-  (`IndexFaces`, `SearchFacesByImage`, `DeleteFaces`), read/write on the member
-  table, and log writing. Bedrock permissions are added when a feature needs them.
-- **CloudWatch Logs and metrics:** structured logs, error and latency alarms.
+- **SSM Parameter Store (SecureString):** Supabase URL and service key, webhook
+  secret, and tunable settings such as the similarity threshold.
+- **CloudWatch:** logs, metrics, and alarms.
+- **EventBridge schedule (optional, later):** periodically re-queues members whose
+  enrolment is pending or failed.
 
-## Service calls
+## IAM
 
-The function calls only the AWS services it needs, directly over their public
-endpoints: Rekognition, DynamoDB, and CloudWatch. There is no
-private networking layer.
+| Role   | Permissions                                                                 |
+| ------ | --------------------------------------------------------------------------- |
+| API    | `rekognition:SearchFacesByImage`, `rekognition:DetectFaces`, `sqs:SendMessage` on the queue, read of its SSM parameters, log writes. |
+| Worker | `rekognition:IndexFaces`, `rekognition:DeleteFaces`, `rekognition:DetectFaces`, SQS receive and delete on the queue, read of its SSM parameters, log writes. |
+
+Bedrock permissions are added only when a feature requires them.
+
+## Supabase-side setup
+
+- Columns on the member record for enrolment state: `face_status`, `face_id`,
+  and an optional error note.
+- A database webhook on insert, update, and delete of members, targeting the
+  webhook route and sending the shared secret header.
+- A private storage bucket for member photos.
+- Row-level security so staff can read member details after search.
 
 ## Environments
 
-| Environment | Purpose                         |
-| ----------- | ------------------------------- |
-| `dev`       | Integration and early testing   |
-| `staging`   | Production-like verification    |
-| `prod`      | Live traffic                    |
+| Environment | Purpose                       |
+| ----------- | ----------------------------- |
+| `dev`       | Integration and early testing |
+| `staging`   | Production-like verification  |
+| `prod`      | Live traffic                  |
 
-Each environment is deployed from the same code; only configuration differs.
+Each environment has its own Rekognition collection, queue, parameters, and
+Supabase project or schema. Code is identical; only configuration differs.
 
 ## Infrastructure as code
 
@@ -42,22 +59,22 @@ through the pipeline. Manual console changes are not part of the process.
 ## Delivery pipeline
 
 1. Pull request: lint, type check, unit tests.
-2. Merge to main: package the function and run tests.
+2. Merge to main: package both functions and run tests.
 3. Deploy to `dev` automatically, then `staging`.
-4. Promotion to `prod` after approval, using a Lambda alias with gradual
-   traffic shifting and automatic rollback on alarms.
+4. Promotion to `prod` after approval, using Lambda aliases with gradual traffic
+   shifting and automatic rollback on alarms.
 
 ## Operational notes
 
-- Rekognition availability and quotas should be confirmed for the chosen region.
-- Lambda accepts request payloads up to 6 MB, so clients should downscale photos
-  (about 1600 px JPEG) before upload.
-- The HTTP API integration timeout (30 seconds) bounds request duration;
-  set the Lambda timeout just under it.
-- Cold starts add latency to the first request after idle periods; provisioned
-  concurrency can be added later if this matters.
+- Confirm Rekognition availability and quotas in the chosen region.
+- Cap worker concurrency so a bulk import of members does not exceed Rekognition
+  request limits; the queue absorbs the backlog.
+- Alarm on any message in the dead-letter queue and on queue age.
+- Clients downscale photos before upload because Lambda accepts at most 6 MB
+  per request.
+- Cold starts add latency to the first request after idle periods.
 
 ## Future hardening
 
-If network isolation becomes a requirement, the function can be attached to a
-VPC with interface endpoints for the services it calls. This is a contained change in `infra/`.
+If network isolation is required, the functions can be attached to a VPC with
+interface endpoints. This is a contained change in `infra/`.

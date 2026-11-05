@@ -10,7 +10,7 @@ enrolled members.
 ## Decision
 Use Amazon Rekognition face collections. Enrolment calls `IndexFaces` and
 lookup calls `SearchFacesByImage`. The member identifier is stored as the
-face's external image identifier, and member details are held in DynamoDB.
+face's external image identifier. Member details remain in Supabase.
 
 ## Alternatives considered
 - **Bedrock multimodal embeddings with a vector store:** general-purpose image

@@ -2,84 +2,118 @@
 
 ## Purpose
 
-Allow staff to find a member by photo. A photo is enrolled against a member
-when the member is added; later, a staff member submits a photo and the service
-returns the matching member's details.
+Allow staff to find a member from a photo. Enrolment is driven by changes in
+Supabase: when a member's photo is added, replaced, or removed, the service
+updates that member's face embedding without any manual step.
 
-## Flows
+## Enrolment flow
 
-### Enrolment
-1. A client submits a photo with the member identifier and member details.
-2. The service checks that the photo contains exactly one usable face.
-3. The face is indexed in the Rekognition collection, tagged with the member
-   identifier.
-4. The member details and the returned face identifier are stored in DynamoDB.
-5. Re-enrolling a member replaces the previous face.
+```
+Supabase member row changes
+  → webhook → API Lambda: verify secret, decide if the photo changed, enqueue job
+  → SQS → Worker Lambda:
+       1. read the member's current row from Supabase
+       2. compare photo path with the job; skip if the row has moved on
+       3. create a short-lived signed URL and download the photo
+       4. check the photo has exactly one usable face
+       5. delete the member's previous face, then index the new one
+       6. write face_status and face_id back to Supabase
+```
 
-### Lookup
-1. A client submits a photo.
-2. The service searches the collection for the closest enrolled faces above a
-   similarity threshold.
-3. For each match, the service loads member details and returns them with the
-   similarity score.
+### Rules
+
+- **Jobs carry references only:** `member_id`, the photo storage path, and the
+  row's `updated_at`. Image bytes never travel through the webhook or queue, and
+  signed URLs are created at processing time because they expire.
+- **Write-back must not loop.** The status update changes the member row and
+  would fire the webhook again. The webhook route enqueues a job only when the
+  photo path differs between the old and new record (or on insert or delete).
+- **Stale events are skipped.** The worker acts on the row's current state.
+- **Removal:** when the photo is cleared or the member is deleted, the worker
+  deletes the stored face from Rekognition.
+- **Replacement:** the previous face is deleted using the stored `face_id`
+  before the new one is indexed, so a member never has two faces.
+- **Idempotent:** repeating a job leaves the same result.
+
+### Enrolment status
+
+| `face_status` | Meaning                                              |
+| ------------- | ---------------------------------------------------- |
+| `pending`     | Photo change received, not yet processed             |
+| `ready`       | Face indexed and searchable                          |
+| `no_face`     | Photo had no usable face; a new photo is needed      |
+| `multiple_faces` | Photo had several faces; a new photo is needed    |
+| `failed`      | Processing failed after retries; see the dead-letter queue |
+
+## Search flow
+
+```
+Staff app → API Gateway (JWT checked) → API Lambda → Rekognition → matches
+```
+
+1. The staff app sends a photo with the member's Supabase access token.
+2. API Gateway verifies the token; the function confirms the staff role.
+3. The photo is checked for exactly one face, then searched against the
+   collection.
+4. The function returns up to three candidates above the similarity threshold.
+
+The service returns identifiers and scores only. The app loads member details
+from Supabase under its own row-level security.
 
 ## API (v1)
 
-| Method and path                  | Purpose                                      |
-| -------------------------------- | -------------------------------------------- |
-| `POST /v1/members/{id}/face`     | Enrol or replace a member's photo and details|
-| `DELETE /v1/members/{id}/face`   | Remove the member's face from the collection |
-| `POST /v1/members/search`        | Find members matching a submitted photo      |
+| Method and path                      | Caller   | Purpose                                      |
+| ------------------------------------ | -------- | -------------------------------------------- |
+| `POST /v1/webhooks/member-photo`     | Supabase | Receive member change events                 |
+| `POST /v1/members/search`            | Staff    | Find members matching a submitted photo      |
+| `GET /health`                        | Monitor  | Liveness check                               |
 
-### Enrolment request
-Multipart form with `photo` (JPEG or PNG) and `details` (JSON: name, contact,
-membership fields as agreed).
-
-### Search response
+### Webhook event (fields used)
 ```json
 {
-  "matches": [
-    { "member_id": "m_1042", "similarity": 98.7, "member": { "name": "..." } }
-  ]
+  "type": "UPDATE",
+  "record":     { "id": "m_1042", "photo_path": "members/m_1042/new.jpg", "updated_at": "..." },
+  "old_record": { "id": "m_1042", "photo_path": "members/m_1042/old.jpg" }
 }
+```
+
+### Search request and response
+Request: multipart form with `photo` (JPEG or PNG).
+```json
+{ "matches": [ { "member_id": "m_1042", "similarity": 98.7 } ] }
 ```
 An empty `matches` array means no member met the threshold.
 
-## Data model
+## Data
 
-| Store         | Content                                                        |
-| ------------- | -------------------------------------------------------------- |
-| Rekognition   | Face vectors, with `member_id` as the external image identifier|
-| DynamoDB      | `member_id` (key), member details, `face_id`, enrolment time   |
+| Store       | Content                                                             |
+| ----------- | ------------------------------------------------------------------- |
+| Supabase    | Member details, photo, `face_status`, `face_id`                     |
+| Rekognition | Face embeddings, with `member_id` as the external image identifier  |
 
 ## Behaviour and limits
 
-- Results are suggestions for staff to confirm, not automated decisions. The
-  service returns up to three candidates ordered by similarity.
-- The similarity threshold is configuration. It starts high and is tuned using
-  real photos from the gym's entrance conditions.
+- Results are suggestions for staff to confirm, not automated decisions.
+- The similarity threshold is configuration. It starts high and is tuned with
+  real photos taken in the gym's entrance conditions.
 - Photos with no face, several faces, or poor quality are rejected with a clear
-  error code.
-- Photo size: clients downscale before upload because Lambda accepts at most
-  6 MB per request.
-- Requests with a printed or on-screen photo can fool matching; liveness
-  checking is not included and is a candidate for later work.
+  error (search) or a status (enrolment).
+- Printed or on-screen photos can fool matching; liveness checking is not
+  included and is a candidate for later work.
 
 ## Privacy and compliance
 
 Face data is biometric and is treated as sensitive personal data.
 
-- Collect explicit consent before enrolment and record that it was given.
-- Provide deletion: removing a member removes their face from the collection
-  and their stored record.
-- Keep source photos out of logs; log identifiers only.
-- Restrict both endpoints to authenticated staff, and record who searched.
+- Collect explicit consent before enrolment and record it on the member.
+- Deletion of a member or photo removes the face from the collection.
+- Keep photos and embeddings out of logs; log identifiers only.
+- Restrict search to authenticated staff and record who searched.
 - Confirm the legal requirements of the operating jurisdiction before launch.
 
 ## Open questions
 
-- Is the member record owned by this service, or does another system hold it and
-  this service stores only the identifier and face?
-- Authentication method for staff (see architecture).
-- Retention period for source photos, if they are kept at all.
-- Expected member count, to confirm collection and cost estimates.
+- Staff claim name in the Supabase token.
+- Retention and consent-record design in Supabase.
+- Expected member count, to confirm cost estimates.
+- Whether an initial bulk enrolment of existing members is needed.
