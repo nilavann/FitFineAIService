@@ -31,9 +31,11 @@ Bedrock permissions are added only when a feature requires them.
 ## Supabase-side setup
 
 - Columns on the member record for enrolment state: `face_status`, `face_id`,
-  and an optional error note.
+  `face_consent_at` (set when the member consents to face recognition), and an
+  optional error note.
 - A database webhook on insert, update, and delete of members, targeting the
-  webhook route and sending the shared secret header.
+  webhook route and sending the shared secret header. The delete event carries
+  the removed row, including `face_id`, which the delete job needs.
 - A private storage bucket for member photos.
 - Row-level security so staff can read member details after search.
 

@@ -27,12 +27,17 @@ Supabase member row changes
   signed URLs are created at processing time because they expire.
 - **Write-back must not loop.** The status update changes the member row and
   would fire the webhook again. The webhook route enqueues a job only when the
-  photo path differs between the old and new record (or on insert or delete).
+  photo path or the consent timestamp differs between the old and new record (or
+  on insert or delete).
+- **Consent is required.** The worker enrols a face only if the member's
+  `face_consent_at` is set. Without it the member gets `face_status = no_consent`
+  and no face is stored. If consent is later withdrawn (the timestamp is cleared),
+  the change queues a job and the worker removes the existing face.
 - **Stale events are skipped.** The worker acts on the row's current state. Jobs
   from the enrol route carry no photo path, so the worker uses whatever photo the
   row holds at that moment.
-- **Removal:** when the photo is cleared or the member is deleted, the worker
-  deletes the stored face from Rekognition.
+- **Removal:** when the photo is cleared, consent is withdrawn, or the member is
+  deleted, the worker deletes the stored face from Rekognition (see Deletion).
 - **Replacement:** the previous face is deleted using the stored `face_id`
   before the new one is indexed, so a member never has two faces.
 - **Idempotent:** repeating a job leaves the same result.
@@ -43,9 +48,32 @@ Supabase member row changes
 | ------------- | ---------------------------------------------------- |
 | `pending`     | Photo change received, not yet processed             |
 | `ready`       | Face indexed and searchable                          |
+| `no_consent`  | No consent recorded; nothing is stored               |
 | `no_face`     | Photo had no usable face; a new photo is needed      |
 | `multiple_faces` | Photo had several faces; a new photo is needed    |
 | `failed`      | Processing failed after retries; see the dead-letter queue |
+
+### Deletion
+
+Face data is removed immediately when a member is deleted, so no biometric data
+outlives the member.
+
+```
+Supabase member row deleted
+  → database trigger/webhook (DELETE) → API Lambda: verify secret, enqueue delete job
+  → SQS → Worker Lambda: delete the face from Rekognition
+```
+
+- The row is gone by the time the worker runs, so the **delete job carries the
+  `face_id`** taken from the deleted row (`old_record`). A member who was never
+  enrolled has no `face_id`, and the job is skipped.
+- Deleting a face that no longer exists is not an error, so retries are safe.
+- Nothing can be written back to Supabase for a deleted row; the outcome is
+  logged by member identifier.
+- A delete that keeps failing lands in the dead-letter queue, which has an alarm,
+  because failing to remove biometric data needs attention.
+- Postgres cannot write to SQS directly without signing AWS requests. The trigger
+  therefore calls the API route over HTTP, and the API Lambda queues the job.
 
 ## Search flow
 
@@ -130,16 +158,17 @@ negligible, so cost is not a design constraint for this feature.
 Face data is biometric and is treated as sensitive personal data.
 
 - Collect explicit consent before enrolment and record it on the member.
-- Deletion of a member or photo removes the face from the collection.
+- Deleting a member, clearing the photo, or withdrawing consent removes the face
+  from the collection immediately.
 - Keep photos and embeddings out of logs; log identifiers only.
 - Restrict search to signed-in users and record who searched.
 - Confirm the legal requirements of the operating jurisdiction before launch.
 
 ## Open questions
 
-- Consent: should enrolment be blocked until a consent record exists on the member
-  in Supabase (for example a consent timestamp column), or is consent handled
-  outside the system?
-- Retention: when a member leaves, should their face be removed from Rekognition
-  immediately, after a set number of days, or only on request?
+- What counts as a member leaving: only deletion of the row, or also a status
+  change such as `inactive` or `cancelled`? A status change needs its own rule in
+  the webhook filter.
+- The consent column name and how staff record consent in the app.
+
 
