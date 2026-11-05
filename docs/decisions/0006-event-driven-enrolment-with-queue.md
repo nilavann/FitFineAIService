@@ -27,4 +27,3 @@ jobs retry and then move to a dead-letter queue.
 - Enrolment is eventually consistent; `face_status` tells staff when it is ready.
 - The write-back to Supabase would re-trigger the webhook, so the intake route
   only enqueues when the photo path actually changed.
-- A scheduled reconciliation job can later re-queue anything left pending.

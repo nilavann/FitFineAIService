@@ -19,9 +19,6 @@ VPC, subnets, NAT gateways, or databases are used on the AWS side.
 - **SSM Parameter Store (SecureString):** Supabase URL and service key, the
   Supabase JWT secret, webhook secret, and tunable settings such as the similarity threshold.
 - **CloudWatch:** logs, metrics, and alarms.
-- **Backfill script (`scripts/backfill.py`):** one-off job that queues every
-  member with a photo and no `ready` status. The same code can later run on an
-  EventBridge schedule to re-queue pending or failed members.
 
 ## IAM
 
@@ -68,10 +65,8 @@ through the pipeline. Manual console changes are not part of the process.
 ## Operational notes
 
 - Confirm Rekognition availability and quotas in the chosen region.
-- Cap worker concurrency so the initial backfill does not exceed Rekognition
+- Cap worker concurrency so a large burst of jobs does not exceed Rekognition
   request limits; the queue absorbs the backlog.
-- Run the backfill in `dev` first with a small batch, then in `prod` after the
-  webhook is live, so photos changed during the backfill are not missed.
 - Alarm on any message in the dead-letter queue and on queue age.
 - Clients downscale photos before upload because Lambda accepts at most 6 MB
   per request.

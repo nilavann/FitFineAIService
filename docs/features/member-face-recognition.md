@@ -85,15 +85,6 @@ Request: multipart form with `photo` (JPEG or PNG).
 ```
 An empty `matches` array means no member met the threshold.
 
-## Initial backfill
-
-Existing members are enrolled by `scripts/backfill.py`. It selects members that
-have a photo and no `ready` status, sets them to `pending`, and queues one job
-each, the same job shape the webhook produces. Worker concurrency is capped so
-Rekognition limits are respected. The script is safe to re-run. It should run
-after the webhook is live so that photo changes made during the backfill are
-not lost.
-
 ## Data
 
 | Store       | Content                                                             |
@@ -125,4 +116,4 @@ Face data is biometric and is treated as sensitive personal data.
 
 - Retention and consent-record design in Supabase.
 - Expected member count, to confirm cost estimates.
-- Number of existing members to backfill, for time and cost estimates.
+- How the app will submit existing members for enrolment (see the note under Enrolment flow).
