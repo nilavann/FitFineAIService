@@ -3,22 +3,25 @@
 ## Target platform
 
 The service runs on AWS as a single Lambda function exposed through an Amazon
-API Gateway HTTP API. Model inference is provided by Amazon Bedrock; no model
-hosting is managed by this project. No VPC, subnets, or NAT gateways are used.
+API Gateway HTTP API. Face matching is provided by Amazon Rekognition and
+member records are held in DynamoDB; no model hosting is managed by this project. No VPC, subnets, or NAT gateways are used.
 
 ## Components
 
 - **API Gateway (HTTP API):** public HTTPS entry point; routes all requests to
   the function and applies throttling.
 - **Lambda function (Python 3.12):** runs the FastAPI application via Mangum.
-- **IAM execution role:** grants only `bedrock:InvokeModel` on the approved
-  models, plus permission to write logs.
+- **Amazon Rekognition:** one face collection per environment.
+- **DynamoDB:** member table with on-demand capacity.
+- **IAM execution role:** least privilege: the Rekognition collection actions
+  (`IndexFaces`, `SearchFacesByImage`, `DeleteFaces`), read/write on the member
+  table, and log writing. Bedrock permissions are added when a feature needs them.
 - **CloudWatch Logs and metrics:** structured logs, error and latency alarms.
 
 ## Service calls
 
 The function calls only the AWS services it needs, directly over their public
-endpoints: Bedrock for inference and CloudWatch for logging. There is no
+endpoints: Rekognition, DynamoDB, and CloudWatch. There is no
 private networking layer.
 
 ## Environments
@@ -46,9 +49,10 @@ through the pipeline. Manual console changes are not part of the process.
 
 ## Operational notes
 
-- Bedrock model access must be enabled per account and region before first use.
-- Bedrock service quotas should be reviewed ahead of production load.
-- The HTTP API integration timeout (30 seconds) bounds model call duration;
+- Rekognition availability and quotas should be confirmed for the chosen region.
+- Lambda accepts request payloads up to 6 MB, so clients should downscale photos
+  (about 1600 px JPEG) before upload.
+- The HTTP API integration timeout (30 seconds) bounds request duration;
   set the Lambda timeout just under it.
 - Cold starts add latency to the first request after idle periods; provisioned
   concurrency can be added later if this matters.
@@ -56,4 +60,4 @@ through the pipeline. Manual console changes are not part of the process.
 ## Future hardening
 
 If network isolation becomes a requirement, the function can be attached to a
-VPC with a Bedrock interface endpoint. This is a contained change in `infra/`.
+VPC with interface endpoints for the services it calls. This is a contained change in `infra/`.

@@ -11,8 +11,9 @@ each request.
 ## System context
 
 ```
- FitFine clients ──HTTPS──▶ API Gateway ──▶ Lambda (FastAPI) ──▶ Amazon Bedrock
-                                                 │
+ FitFine clients ──HTTPS──▶ API Gateway ──▶ Lambda (FastAPI) ──▶ Amazon Rekognition
+                                                 │            ──▶ DynamoDB (members)
+                                                 │            ──▶ Amazon Bedrock (later)
                                                  └──▶ CloudWatch (logs, metrics)
 ```
 
@@ -20,6 +21,11 @@ The function is not attached to a VPC. It reaches Bedrock and CloudWatch
 through their public AWS service endpoints, authenticated by its IAM
 execution role and encrypted with TLS. The FastAPI application is adapted to
 the Lambda event model with Mangum.
+
+## Capabilities
+
+- [Member face recognition](features/member-face-recognition.md): enrol a member's
+  photo and look up members from a photo.
 
 ## Layering
 
@@ -30,13 +36,13 @@ Code is organised so that each layer depends only on the one beneath it.
 | API        | `app/api/`     | Routing, HTTP concerns, status codes. No business logic.|
 | Schemas    | `app/schemas/` | Typed request and response models (Pydantic).           |
 | Services   | `app/services/`| Feature logic; orchestrates prompts and model calls.    |
-| AI         | `app/ai/`      | Bedrock client wrapper, prompt templates, output parsing.|
+| AI         | `app/ai/`      | Provider client wrappers (Rekognition now; Bedrock and prompt templates later).|
 | Core       | `app/core/`    | Configuration, logging, error types, auth, middleware.  |
 
 ### Design rules
 
 - Route handlers call services; services call the AI layer. Handlers never call
-  Bedrock directly.
+  AWS AI services directly.
 - All model access goes through a single client wrapper in `app/ai/`. Retry,
   timeout, and token-limit handling live there, and tests substitute it with a
   fake.
@@ -71,7 +77,6 @@ Code is organised so that each layer depends only on the one beneath it.
 
 ## Open questions
 
-- Initial set of AI capabilities and their request/response contracts.
+- Contracts for capabilities beyond member face recognition.
 - Authentication mechanism (Cognito-issued JWTs, API keys, or IAM-signed calls).
-- Which Bedrock model(s) are used per capability.
 - Whether any responses should be cached, and for how long.

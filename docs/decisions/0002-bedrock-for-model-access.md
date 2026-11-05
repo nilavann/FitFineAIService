@@ -1,6 +1,6 @@
 # 0002. Amazon Bedrock for model access
 
-**Status:** Accepted
+**Status:** Accepted for generative features. Face recognition uses Rekognition; see [0005](0005-rekognition-for-face-matching.md).
 
 ## Context
 The service is deployed on AWS and needs hosted foundation models without

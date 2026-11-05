@@ -10,7 +10,9 @@ other FitFine applications.
 | ----------------- | ----------------------------------------------- |
 | Language          | Python 3.12                                     |
 | API framework     | FastAPI                                         |
-| Model access      | Amazon Bedrock                                  |
+| Face recognition  | Amazon Rekognition (face collections)           |
+| Member data       | Amazon DynamoDB                                 |
+| Generative models | Amazon Bedrock (reserved for later features)    |
 | Compute           | AWS Lambda behind Amazon API Gateway (HTTP API) |
 | Infrastructure    | AWS CDK (Python)                                |
 | Packaging         | Lambda deployment package (zip) via CDK         |
@@ -19,6 +21,7 @@ other FitFine applications.
 
 - [Architecture](docs/architecture.md): components, request flow, and layering.
 - [Deployment](docs/deployment.md): AWS topology, environments, and delivery pipeline.
+- [Member face recognition](docs/features/member-face-recognition.md): the first feature, with API contracts.
 - [Decision records](docs/decisions/): the reasoning behind significant choices.
 
 ## Repository layout (target)
